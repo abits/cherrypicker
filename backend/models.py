@@ -1,4 +1,4 @@
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.declarative import declarative_base, Column
 from datetime import date, datetime
 import ConfigParser
 from lib.TVRage import TVRage
@@ -7,21 +7,21 @@ Base = declarative_base()
 
 class Show(Base):
     __tablename__ = 'show'
-    id = Column(Integer, primary_key=True)
-    name = Column(String(128), unique=True)
-    showlink = Column(String(255))
-    showid = Column(Integer(16), unique=True)
-    origin_country = Column(String(8), nullable=True)
-    started = Column(String(32), nullable=True)
-    ended = Column(String(32), nullable=True)
-    status = Column(String(32), nullable=True)
-    runtime = Column(Integer(8), nullable=True)
-    totalseasons = Column(Integer(8), nullable=True)
-    airtime = Column(String(32), nullable=True)
-    airday = Column(String(32), nullable=True)
-    classification = Column(String(32), nullable=True)
-    image = Column(String(255), nullable=True)
-    episodes = relationship('Episode', backref='show')
+    id = Column(Base.Integer, primary_key=True)
+    name = Column(Base.String(128), unique=True)
+    show_link = Column(Base.String(255))
+    show_id = Column(Base.Integer(16), unique=True)
+    origin_country = Column(Base.String(8), nullable=True)
+    started = Column(Base.String(32), nullable=True)
+    ended = Column(Base.String(32), nullable=True)
+    status = Column(Base.String(32), nullable=True)
+    runtime = Column(Base.Integer(8), nullable=True)
+    total_seasons = Column(Base.Integer(8), nullable=True)
+    airtime = Column(Base.String(32), nullable=True)
+    air_day = Column(Base.String(32), nullable=True)
+    classification = Column(Base.String(32), nullable=True)
+    image = Column(Base.String(255), nullable=True)
+    episodes = Base.relationship('Episode', backref='show')
 
     def __init__(self, name, *args, **kwargs):
         super(Show, self).__init__(*args, **kwargs)
@@ -45,17 +45,16 @@ class Show(Base):
         :type connector: TVRage
         """
         show_data = connector.update(self.name)
-        self.name = CharField(max_length=128, unique=True)
-        self.showlink = show_data['showlink']
-        self.showid = show_data['showid']
+        self.show_link = show_data['showlink']
+        self.show_id = show_data['showid']
         self.origin_country = show_data['origin_country']
         self.started = show_data['started']
         self.ended = show_data['ended']
         self.status =show_data['status']
         self.runtime = show_data['runtime']
-        self.totalseasons = show_data['totalseasons']
+        self.total_seasons = show_data['totalseasons']
         self.airtime = show_data['airhours']
-        self.airday = show_data['airday']
+        self.air_day = show_data['airday']
         self.classification = show_data['classification']
         self.image = show_data['image']
         self.save()
@@ -75,7 +74,7 @@ class Show(Base):
 
         :param connector: TVRage
         """
-        episode_data = connector.update_episodes(self.showid)
+        episode_data = connector.update_episodes(self.show_id)
         for ep in episode_data:
             episode = Episode()
             episode.show = self
@@ -121,17 +120,17 @@ class Show(Base):
 
 
 
-class Episode(Model):
+class Episode(Base):
     __tablename__ = 'episode'
-    id = Column(Integer, primary_key=True)
-    num = IntegerField(Integer(4), blank=True, null=True)
-    epnum = IntegerField(Integer(2), blank=True, null=True)
-    seasonnum = IntegerField(Integer(2), blank=True, null=True)
-    airdate = DateField(blank=True, null=True)
-    link = URLField(String(255), null=True)
-    title = CharField(String(1024), blank=True, null=True)
-    screencap = URLField(String(255), null=True)
-    show = Column(Integer, ForeignKey('show.id'))
+    id = Column(Base.Integer, primary_key=True)
+    num = Column(Base.Integer(4), blank=True, null=True)
+    ep_num = Column(Base.Integer(2), blank=True, null=True)
+    season_num = Column(Base.Integer(2), blank=True, null=True)
+    air_date = Column(blank=True, null=True)
+    link = Column(Base.String(255), null=True)
+    title = Column(Base.String(1024), blank=True, null=True)
+    screen_cap = Column(Base.String(255), null=True)
+    show = Column(Base.Integer, Base.ForeignKey('show.id'))
 
     def to_string(self):
         string = ""
