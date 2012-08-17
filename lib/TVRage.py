@@ -62,13 +62,13 @@ class TVRage:
         airtime_components = root.findtext('airtime').split(':')
         airhours_utc = int(airtime_components[0]) - int(re.sub('GMT', '', timezone_components[0]))
         if timezone_components[1] == '+DST':
-            airhours_utc = airhours_utc - 1
+            airhours_utc -= 1
         weekday_utc_ind = weekdays.index(root.findtext('airday'))
         if airhours_utc > 23:
-            weekday_utc_ind = weekday_utc_ind + 1
+            weekday_utc_ind += 1
         elif airhours_utc < 0:
-            weekday_utc_ind = weekday_utc_ind - 1
-        weekday_utc_ind = weekday_utc_ind % 7
+            weekday_utc_ind -= 1
+        weekday_utc_ind %= 7
         airday_utc = weekdays[weekday_utc_ind]
         airhours_utc = "%s:%s" % (airhours_utc % 24, airtime_components[1])
 
@@ -116,3 +116,7 @@ class TVRage:
                 slot_items = {datetime_object: show_slots}
                 schedule_data.append(slot_items)
         return schedule_data
+
+if __name__ == '__main__':
+    tvr = TVRage()
+    print tvr.current_schedule()

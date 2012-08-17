@@ -1,7 +1,6 @@
-import urllib, urllib2
+import urllib2
 from BeautifulSoup import BeautifulSoup
-from catalogue.models import Show
-from lib import TVRage
+from backend.entity import Show
 
 class EZTV:
     base_url = 'http://eztv.it/showlist/'
