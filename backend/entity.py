@@ -5,7 +5,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
-
+Session = sessionmaker()
 
 class Show(Base):
     __tablename__ = 'shows'
@@ -27,11 +27,37 @@ class Show(Base):
     updated_at = Column(DateTime, default=func.now())
 
     def __repr__(self):
-        return "<Show('%s')>" % (self.name)
+        return "<Show('%s, %s %s')>" % (self.name, self.air_day, self.airtime)
 
-    def __init__(self, name):
+    def __init__(self, name, connector):
         self.name = name
+        self.connector = connector
 
+    def update(self):
+        """
+        Update object with data retrieved by connector.
+
+        """
+        show_data = self.connector.update_show(self.name)
+        self.show_link = show_data['show_link']
+        self.tvr_id = show_data['show_id']
+        self.origin_country = show_data['origin_country']
+        self.started = show_data['started']
+        self.ended = show_data['ended']
+        self.status =show_data['status']
+        self.runtime = show_data['runtime']
+        self.total_seasons = show_data['total_seasons']
+        self.airtime = show_data['air_hours']
+        self.air_day = show_data['air_day']
+        self.classification = show_data['classification']
+        self.image = show_data['image']
+
+        return isinstance(self.tvr_id, int)
+
+    def save(self):
+        session = Session()
+        session.add(self)
+        session.commit()
 
 class Episode(Base):
     __tablename__ = 'episodes'
@@ -62,32 +88,90 @@ class Subscription(Base):
     next_pull_date = Column(DateTime, nullable=True)
 
 class Schedule(object):
-    schedule_data = []
+    current_shows = []
     catalogue_connector = None
 
     def __init__(self, catalogue_connector):
         self.catalogue_connector = catalogue_connector
 
     def set_schedule(self):
-        self.schedule_data = self.catalogue_connector.current_shows()
-        print self.schedule_data
+        self.current_shows = self.catalogue_connector.current_shows()
 
     def get_schedule_for_day(self, date):
         pass
 
 class EntityManager(object):
-    def __init__(self, declarative_base):
-        self.base = declarative_base()
+    """ Represents database interactions, is a singleton. """
+    __single = None
+    _base = None
+    engine = None
+    session = None
+    database_engine = 'sqlite'
+    database_path = '/data.sqlite'
 
-    def update_db(self):
-        engine = create_engine('sqlite:///data.db', echo=True)
-        metadata = MetaData(engine)
-        self.base.metadata.create_all(engine)
+    def __init__(self, declarative_base):
+        self._base = declarative_base()
+
+    def __new__(cls, *args, **kwargs):
+        if cls != type(cls.__single):
+            cls.__single = object.__new__(cls, *args, **kwargs)
+        return cls.__single
+
+    def init_db(self):
+        if not self.engine:
+            self._create_connection()
+        self._base.metadata.create_all(self.engine)
+
+    def _create_connection(self):
+        engine_path = self.database_engine + '://' + self.database_path
+        self.engine = create_engine(engine_path, echo=True)
+        Session.configure(bind=self.engine)
+
+    def update_shows(self):
+        # get schedule
+        schedule = Schedule(connector.EztvCatalogueConnector())
+        try:
+            schedule.set_schedule()
+        except:
+            raise IOError
+        session = Session()
+        print schedule.current_shows
+        for show_name in schedule.current_shows:
+            query = session.query(Show).filter_by(name=show_name).all()
+            if not query: # found nothing in the db
+                show = Show(show_name, connector.TvrageShowConnector())
+            else:
+                show = query.pop()
+                show.connector = connector.TvrageShowConnector()
+            if not show.tvr_id: # don't want stuff not in tv rage db
+                continue
+            else:
+                session.add(show)
+                print show.__repr__()
+        session.commit()
+
 
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
-    entity_manager.update_db()
-    cc = connector.EztvConnector()
-    sched = Schedule(cc)
-    sched.set_schedule()
-    sched.set_schedule()
+    entity_manager.init_db()
+#    session = Session()
+#    cc = connector.EztvCatalogueConnector()
+#    sched = Schedule(cc)
+#    sched.set_schedule()
+#    q = session.query(Show).filter_by(name='Fringe').all()
+#    if not q:
+#        cs = connector.TvrageShowConnector()
+#        show = Show('Fringe', cs)
+#        show.update()
+#        show.save()
+#    else:
+#        show = q.pop()
+#    print show.__repr__()
+    entity_manager.update_shows()
+
+
+
+
+
+
+

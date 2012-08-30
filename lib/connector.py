@@ -1,4 +1,6 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
+from pytz import timezone
+import pytz
 import re
 import urllib
 import urllib2
@@ -45,7 +47,21 @@ class Connector(object):
         self._cache.setDataItem(item, obj)
 
 class ShowConnector(Connector):
-    pass
+    """ Defines the api for show data. """
+    show_data = {
+        'show_id': '',
+        'air_day' : '',
+        'air_hours' : '',
+        'show_link': '',
+        'classification': '',
+        'total_seasons': '',
+        'status': '',
+        'ended': '',
+        'started': '',
+        'origin_country': '',
+        'image': '',
+        'runtime': '',
+        }
 
 class EpisodeConnector(Connector):
     pass
@@ -61,7 +77,7 @@ class CatalogueConnector(Connector):
         raise NotImplementedError
 
 
-class EztvConnector(CatalogueConnector):
+class EztvCatalogueConnector(CatalogueConnector):
     """ Retrieves show data from eztv.it. """
 
     _service_base_urls = { 'base': 'http://eztv.it/showlist/' }
@@ -69,11 +85,11 @@ class EztvConnector(CatalogueConnector):
     def current_shows(self):
         """ Retrieve data for shows which are currently airing."""
 
-        show_data =  self.getDataItem('current_shows')
+        show_data =  self.getDataItem('ezt_catalogue_current_shows')
         if not show_data:
             show_data = self._scrape(self._service_base_urls['base'])
         if show_data:
-            self.setDataItem('current_shows', show_data)
+            self.setDataItem('ezt_catalogue_current_shows', show_data)
         return show_data
 
     def _scrape(self, url):
@@ -90,98 +106,26 @@ class EztvConnector(CatalogueConnector):
                     shows.append(show_name[0])
         return shows
 
-
-class TvrageConnector(ShowConnector):
-    """ Retrieve detailed show and episode info from tvrage.com. """
+class TvrageCatalogueConnector(CatalogueConnector):
+    """ Retrieve schedule info from tvrage.com. """
 
     _service_api_key = 'mKu5LRsqNomqFnQrqBxa'
     _service_base_urls = {
-            'full_search': 'http://services.tvrage.com/feeds/full_search.php?',
-            'full_show_info': 'http://services.tvrage.com/feeds/full_show_info.php?',
-            'search': 'http://services.tvrage.com/feeds/search.php?',
-            'full_schedule': 'http://services.tvrage.com/myfeeds/fullschedule.php?'
-            }
+        'full_search': 'http://services.tvrage.com/feeds/full_search.php?',
+        'full_show_info': 'http://services.tvrage.com/feeds/full_show_info.php?',
+        'search': 'http://services.tvrage.com/feeds/search.php?',
+        'full_schedule': 'http://services.tvrage.com/myfeeds/fullschedule.php?'
+    }
 
-    def update(self, show_name):
-        parameters = {'sid': self._findShowId(show_name)}
-        request_url = self._service_base_urls['full_show_info'] + urllib.urlencode(parameters)
-        file_handle = urllib2.urlopen(request_url)
-        show_data = self._parse(file_handle)
-        return show_data
-
-    def update_episodes(self, show_id):
-        parameters = {'sid': show_id}
-        requestUrl = self._service_base_urls['full_show_info'] + urllib.urlencode(parameters)
-        episode_data = self._parse_episodes(urllib2.urlopen(requestUrl))
-        return episode_data
-
-    def current_schedule(self):
-        parameters = {'key': self._service_api_key}
-        requestUrl = self._service_base_urls['full_schedule']+ urllib.urlencode(parameters)
-        return self._parse_schedule(urllib2.urlopen(requestUrl))
-
-    def _parse_episodes(self, fileHandle):
-        tree = et.parse(fileHandle)
-        root = tree.getroot()
-        episode_data = []
-        seasons = root.findall('Episodelist/Season')
-        for season in seasons:
-            for episode in season.findall('episode'):
-                year, month, day = episode.findtext('airdate').split('-')
-                ep = {
-                    'airdate': date(int(year), int(month), int(day)),
-                    'epnum': int(episode.findtext('seasonnum')),
-                    'num': int(episode.findtext('epnum')),
-                    'seasonnum': int(season.attrib['no']),
-                    'link': episode.findtext('link'),
-                    'title': episode.findtext('title'),
-                    'screencap': episode.findtext('screencap')
-                }
-                episode_data.append(ep)
-        return episode_data
-
-    def _parse(self, file_handle):
-        weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday',
-                    'Friday', 'Saturday', 'Sunday']
-        tree = et.parse(file_handle)
-        root = tree.getroot()
-        # handle time with timezone, convert to utc
-        timezone_components = root.findtext('timezone').split(' ')
-        airtime_components = root.findtext('airtime').split(':')
-        airhours_utc = int(airtime_components[0]) - int(re.sub('GMT', '', timezone_components[0]))
-        if timezone_components[1] == '+DST':
-            airhours_utc -= 1
-        weekday_utc_ind = weekdays.index(root.findtext('airday'))
-        if airhours_utc > 23:
-            weekday_utc_ind += 1
-        elif airhours_utc < 0:
-            weekday_utc_ind -= 1
-        weekday_utc_ind %= 7
-        airday_utc = weekdays[weekday_utc_ind]
-        airhours_utc = "%s:%s" % (airhours_utc % 24, airtime_components[1])
-
-        show_data = {
-            'showid': root.findtext('showid'),
-            'airday' : airday_utc,
-            'airhours' : airhours_utc,
-            'showlink': root.findtext('showlink'),
-            'classification': root.findtext('classification'),
-            'totalseasons': root.findtext('totalseasons'),
-            'status': root.findtext('status'),
-            'ended': root.findtext('ended'),
-            'started': root.findtext('started'),
-            'origin_country': root.findtext('origin_country'),
-            'image': root.findtext('image'),
-            'runtime': root.findtext('runtime'),
-            }
-        return show_data
-
-    def _findShowId(self, search_term):
-        parameters = {'show': search_term}
-        requestUrl = self._baseUrls['search'] + urllib.urlencode(parameters)
-        tree = et.parse(urllib2.urlopen(requestUrl))
-        shows = tree.getiterator('show')
-        return shows[0].findtext('showid')
+    def current_shows(self):
+        schedule_data = self.getDataItem('tvr_catalogue_current_shows')
+        if not schedule_data:
+            parameters = {'key': self._service_api_key}
+            requestUrl = self._service_base_urls['full_schedule']+ urllib.urlencode(parameters)
+            schedule_data = self._parse_schedule(urllib2.urlopen(requestUrl))
+        if schedule_data:
+            self.setDataItem('tvr_catalogue_current_shows', schedule_data)
+        return schedule_data
 
     def _parse_schedule(self, response):
         schedule_data = []
@@ -204,3 +148,129 @@ class TvrageConnector(ShowConnector):
                 slot_items = {datetime_object: show_slots}
                 schedule_data.append(slot_items)
         return schedule_data
+
+class TvrageEpisodeConnector(CatalogueConnector):
+    """ Retrieve detailed episode info from tvrage.com. """
+
+    _service_api_key = 'mKu5LRsqNomqFnQrqBxa'
+    _service_base_urls = {
+        'full_search': 'http://services.tvrage.com/feeds/full_search.php?',
+        'full_show_info': 'http://services.tvrage.com/feeds/full_show_info.php?',
+        'search': 'http://services.tvrage.com/feeds/search.php?',
+        'full_schedule': 'http://services.tvrage.com/myfeeds/fullschedule.php?'
+    }
+
+    def update_episodes(self, show_id):
+        parameters = {'sid': show_id}
+        requestUrl = self._service_base_urls['full_show_info'] + urllib.urlencode(parameters)
+        episode_data = self._parse_episodes(urllib2.urlopen(requestUrl))
+        return episode_data
+
+    def _parse_episodes(self, fileHandle):
+        tree = et.parse(fileHandle)
+        root = tree.getroot()
+        episode_data = []
+        seasons = root.findall('Episodelist/Season')
+        for season in seasons:
+            for episode in season.findall('episode'):
+                year, month, day = episode.findtext('airdate').split('-')
+                ep = {
+                    'airdate': date(int(year), int(month), int(day)),
+                    'epnum': int(episode.findtext('seasonnum')),
+                    'num': int(episode.findtext('epnum')),
+                    'seasonnum': int(season.attrib['no']),
+                    'link': episode.findtext('link'),
+                    'title': episode.findtext('title'),
+                    'screencap': episode.findtext('screencap')
+                }
+                episode_data.append(ep)
+        return episode_data
+
+class TvrageShowConnector(ShowConnector):
+    """ Retrieve detailed show info from tvrage.com. """
+
+    _service_api_key = 'mKu5LRsqNomqFnQrqBxa'
+    _service_base_urls = {
+            'full_search': 'http://services.tvrage.com/feeds/full_search.php?',
+            'full_show_info': 'http://services.tvrage.com/feeds/full_show_info.php?',
+            'search': 'http://services.tvrage.com/feeds/search.php?',
+            'full_schedule': 'http://services.tvrage.com/myfeeds/fullschedule.php?'
+            }
+
+    def update_show(self, show_name):
+        parameters = {'sid': self._findShowId(show_name)}
+        request_url = self._service_base_urls['full_show_info'] + urllib.urlencode(parameters)
+        file_handle = urllib2.urlopen(request_url)
+        show_data = self._parse(file_handle)
+        return show_data
+
+    def _parse(self, file_handle):
+        tree = et.parse(file_handle)
+        root = tree.getroot()
+        # assign the simple stuff
+        show_data = {'show_id': self._filter_number(root, 'showid'),
+                     'show_link': self._filter_phrase(root, 'showlink'),
+                     'classification': self._filter_phrase(root, 'classification'),
+                     'total_seasons': self._filter_number(root, 'totalseasons'),
+                     'status': self._filter_phrase(root, 'status'),
+                     'ended': self._get_date_string(root, 'ended'),
+                     'started': self._get_date_string(root, 'started'),
+                     'origin_country': self._filter_phrase(root, 'origin_country'),
+                     'image': self._filter_phrase(root, 'image'),
+                     'runtime': self._filter_number(root, 'runtime'),
+                     'air_day': self._filter_phrase(root, 'airday'),
+                     'air_hours': self._get_airtime(root)}
+        return show_data
+
+    def _filter_phrase(self, root, phrase):
+        return_value = None
+        phrase_string = root.findtext(phrase)
+        if phrase_string:
+            return_value = root.findtext(phrase)
+        return return_value
+
+    def _filter_number(self, root, number):
+        return_value = None
+        number_string = root.findtext(number)
+        if number_string:
+            return_value = int(number_string)
+        return return_value
+
+    def _get_airtime(self, root):
+        airtime = '%s %s' % (root.findtext('airtime'), root.findtext('timezone'))
+        return airtime
+
+    def _get_date_string(self, root, phrase):
+        date_string = None
+        months = { 'Jan': '01',
+                   'Feb': '02',
+                   'Mar': '03',
+                   'Apr': '04',
+                   'May': '05',
+                   'Jun': '06',
+                   'Jul': '07',
+                   'Aug': '08',
+                   'Sep': '09',
+                   'Oct': '11',
+                   'Nov': '11',
+                   'Dec': '12' }
+        date_phrase = root.findtext(phrase)
+        if date_phrase:
+            month_word, day, year = date_phrase.split('/')
+            month = months[month_word]
+            date_string = '%s-%s-%s' % (year, month, day)
+        return date_string
+
+    def _get_ended(self, root):
+        pass
+
+    def _findShowId(self, search_term):
+        parameters = {'show': search_term}
+        requestUrl = self._service_base_urls['search'] + urllib.urlencode(parameters)
+        tree = et.parse(urllib2.urlopen(requestUrl))
+        shows = tree.getiterator('show')
+        if shows:
+            return shows[0].findtext('showid')
+        else:
+            return None
+
