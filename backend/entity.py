@@ -70,13 +70,25 @@ class Episode(Base):
     show_id = Column(Integer, ForeignKey('shows.id'), nullable=False)
 
     def __repr__(self):
-        return "<Episode('%s','%s', '%s')>" % (self.name, self.tvr_id, self.air_day)
+        return "<Episode('%s, %02dx%02d')>" % (self.show_id, int(self.season_num), int(self.ep_num))
 
-    def __init__(self, show_id, season_num, ep_num):
+    def __init__(self, show_id, episode_data):
         self.show_id = show_id
-        self.season_num = season_num
-        self.ep_num = ep_num
+        self.episode_data = episode_data
+        self.num = int(self.episode_data['num'])
 
+    def update(self):
+        self.ep_num = int(self.episode_data['ep_num'])
+        self.season_num = int(self.episode_data['season_num'])
+        self.air_date = self.episode_data['air_date']
+        self.link = self.episode_data['link']
+        self.title = self.episode_data['title']
+        self.screen_cap = self.episode_data['screen_cap']
+
+    def save(self):
+        session = Session()
+        session.add(self)
+        session.commit()
 
 class Subscription(Base):
     __tablename__ = 'subscriptions'
@@ -120,6 +132,10 @@ class EntityManager(object):
             self._create_connection()
         self._base.metadata.create_all(self.engine)
 
+    def connect_db(self):
+        if not self.engine:
+            self._create_connection()
+
     def _create_connection(self):
         engine_path = self.database_engine + '://' + self.database_path
         self.engine = create_engine(engine_path, echo=True)
@@ -133,7 +149,6 @@ class EntityManager(object):
         except:
             raise IOError
         session = Session()
-        print schedule.current_shows
         for show_name in schedule.current_shows:
             query = session.query(Show).filter_by(name=show_name).all()
             if not query: # found nothing in the db
@@ -146,27 +161,35 @@ class EntityManager(object):
                 continue
             else:
                 session.add(show)
-                print show.__repr__()
+        session.commit()
+
+    def update_episodes(self, show):
+        session = Session()
+        episode_connector = connector.TvrageEpisodeConnector()
+        episodes = episode_connector.update_episodes(show)
+        for ep in episodes:
+            # see if we already got the episode in database
+            query = session.query(Episode).join(Show).filter(Show.id == show.id).filter(Episode.num == ep['num']).all()
+            if not query:
+                episode = Episode(show.id, ep)
+            else:
+                episode = query.pop()
+                episode.episode_data = ep
+                episode.connector = episode_connector
+            episode.update()
+            session.add(episode)
         session.commit()
 
 
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
-    entity_manager.init_db()
-#    session = Session()
-#    cc = connector.EztvCatalogueConnector()
-#    sched = Schedule(cc)
-#    sched.set_schedule()
-#    q = session.query(Show).filter_by(name='Fringe').all()
-#    if not q:
-#        cs = connector.TvrageShowConnector()
-#        show = Show('Fringe', cs)
-#        show.update()
-#        show.save()
-#    else:
-#        show = q.pop()
-#    print show.__repr__()
-    entity_manager.update_shows()
+    entity_manager.connect_db()
+    #entity_manager.init_db()
+    session = Session()
+    #entity_manager.update_shows()
+    query = session.query(Show).all()
+    for show in query:
+        entity_manager.update_episodes(show)
 
 
 

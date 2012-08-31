@@ -1,4 +1,5 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
+import string
 from pytz import timezone
 import pytz
 import re
@@ -64,7 +65,19 @@ class ShowConnector(Connector):
         }
 
 class EpisodeConnector(Connector):
-    pass
+    """ Defines the api for episode data.
+
+        Array keys must match table columns from corresponding model.
+    """
+    episode_data = {
+        'num': '',
+        'ep_num': '',
+        'season_num': '',
+        'air_date': '' ,
+        'link': '',
+        'title': '',
+        'screen_cap': '',
+    }
 
 class CatalogueConnector(Connector):
     """ Retrieve tv listings.
@@ -153,7 +166,7 @@ class TvrageCatalogueConnector(CatalogueConnector):
                 schedule_data.append(slot_items)
         return schedule_data
 
-class TvrageEpisodeConnector(CatalogueConnector):
+class TvrageEpisodeConnector(EpisodeConnector):
     """ Retrieve detailed episode info from tvrage.com. """
 
     _service_api_key = 'mKu5LRsqNomqFnQrqBxa'
@@ -164,31 +177,52 @@ class TvrageEpisodeConnector(CatalogueConnector):
         'full_schedule': 'http://services.tvrage.com/myfeeds/fullschedule.php?'
     }
 
-    def update_episodes(self, show_id):
-        parameters = {'sid': show_id}
+    def update_episodes(self, show):
+        parameters = {'sid': show.tvr_id}
         requestUrl = self._service_base_urls['full_show_info'] + urllib.urlencode(parameters)
-        episode_data = self._parse_episodes(urllib2.urlopen(requestUrl))
+        episode_data = self._parse_episodes(show, urllib2.urlopen(requestUrl))
         return episode_data
 
-    def _parse_episodes(self, fileHandle):
+    def _parse_episodes(self, show, fileHandle):
         tree = et.parse(fileHandle)
         root = tree.getroot()
         episode_data = []
         seasons = root.findall('Episodelist/Season')
         for season in seasons:
             for episode in season.findall('episode'):
-                year, month, day = episode.findtext('airdate').split('-')
                 ep = {
-                    'airdate': date(int(year), int(month), int(day)),
-                    'epnum': int(episode.findtext('seasonnum')),
+                    'air_date': self._get_air_date(show, episode.findtext('airdate')),
+                    'ep_num': int(episode.findtext('seasonnum')),
                     'num': int(episode.findtext('epnum')),
-                    'seasonnum': int(season.attrib['no']),
+                    'season_num': int(season.attrib['no']),
                     'link': episode.findtext('link'),
                     'title': episode.findtext('title'),
-                    'screencap': episode.findtext('screencap')
+                    'screen_cap': episode.findtext('screencap')
                 }
                 episode_data.append(ep)
         return episode_data
+
+    def _get_air_date(self, show, date_value):
+        # Find real airtime converted to UTC.  Incorrect timings for past episodes doesn't matter
+        # as we only need this datetime to calculate earliest possible release dates for
+        # future episodes.
+        time, shift, dst = show.airtime.split()
+        shift = string.replace(shift, 'GMT', '')
+        shift_plus = False
+        if shift.find('+'):
+            shift_plus = True
+        shift = timedelta(hours=int(shift.lstrip('+-')))
+        hours, minutes = time.split(':')
+        year, month, day = date_value.split('-')
+        try:
+            air_date = datetime(int(year), int(month), int(day), int(hours), int(minutes), 0, 0)
+            if shift_plus:
+                air_date += shift
+            else:
+                air_date -= shift
+        except ValueError:
+            air_date = None
+        return air_date
 
 class TvrageShowConnector(ShowConnector):
     """ Retrieve detailed show info from tvrage.com. """
