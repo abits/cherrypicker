@@ -102,8 +102,12 @@ class EztvCatalogueConnector(CatalogueConnector):
         for show in all_shows:
             if 'Airing' in show.parent.parent.font.text:
                 if not 'Irregularly' in show.parent.parent.font.text:
-                    show_name = show.text.split(',', 1)
-                    shows.append(show_name[0])
+                    show_name = show.text.split(',')
+                    if len(show_name) > 1:
+                        show_name_complete = '%s %s' % (show_name[1], show_name[0])
+                    else:
+                        show_name_complete = show_name[0]
+                    shows.append(show_name_complete.strip())
         return shows
 
 class TvrageCatalogueConnector(CatalogueConnector):
@@ -265,12 +269,20 @@ class TvrageShowConnector(ShowConnector):
         pass
 
     def _findShowId(self, search_term):
+        show_id = None
         parameters = {'show': search_term}
         requestUrl = self._service_base_urls['search'] + urllib.urlencode(parameters)
         tree = et.parse(urllib2.urlopen(requestUrl))
         shows = tree.getiterator('show')
-        if shows:
-            return shows[0].findtext('showid')
-        else:
-            return None
+        discontinued = ['Pilot Rejected', 'Canceled/Ended']
+        # use the first match which is not a discontinued show
+        for show in shows:
+            status = show.findtext('status')
+            if status in discontinued:
+                continue # don't use discontinued shows
+            else:
+                show_id = show.findtext('showid')
+                break # we use the first match
+
+        return show_id
 

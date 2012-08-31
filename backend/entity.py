@@ -27,7 +27,7 @@ class Show(Base):
     updated_at = Column(DateTime, default=func.now())
 
     def __repr__(self):
-        return "<Show('%s, %s %s')>" % (self.name, self.air_day, self.airtime)
+        return "<Show('%s (%s), %s %s')>" % (self.name, self.tvr_id, self.air_day, self.airtime)
 
     def __init__(self, name, connector):
         self.name = name
@@ -51,8 +51,6 @@ class Show(Base):
         self.air_day = show_data['air_day']
         self.classification = show_data['classification']
         self.image = show_data['image']
-
-        return isinstance(self.tvr_id, int)
 
     def save(self):
         session = Session()
@@ -143,6 +141,7 @@ class EntityManager(object):
             else:
                 show = query.pop()
                 show.connector = connector.TvrageShowConnector()
+            show.update()
             if not show.tvr_id: # don't want stuff not in tv rage db
                 continue
             else:
