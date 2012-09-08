@@ -45,3 +45,4 @@ if __name__ == '__main__':
     sca = SubscriptionAdapter(entity_manager)
     #sca.generate_subscription_file_template()
     sca.load_subscriptions_from_file()
+

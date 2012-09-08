@@ -1,3 +1,5 @@
+import os
+from datetime import datetime
 from lib import connector
 from sqlalchemy import Integer, String, Column, DateTime, func
 from sqlalchemy import *
@@ -6,6 +8,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 Session = sessionmaker()
+
+class User(Base):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True, index=True)
 
 class Show(Base):
     __tablename__ = 'shows'
@@ -32,6 +39,16 @@ class Show(Base):
     def __init__(self, name, connector):
         self.name = name
         self.connector = connector
+
+    def get_last_episode(self):
+        last_episode = None
+        session = Session()
+        all_episodes = session.query(Episode).filter(Episode.show_id == self.id).all()
+        current_time = datetime.now()
+        for episode in all_episodes:
+            if episode.air_date and episode.air_date < current_time:
+                last_episode = episode
+        return last_episode
 
     def update(self):
         """
@@ -95,7 +112,7 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True)
     show_id = Column(Integer, ForeignKey('shows.id'), nullable=True)
     last_downloaded_episode_id = Column(Integer, ForeignKey('episodes.id'), nullable=True)
-    next_pull_date = Column(DateTime, nullable=True)
+    active = Column(Boolean, nullable=False, default=True)
 
 class Schedule(object):
     current_shows = []
@@ -117,7 +134,8 @@ class EntityManager(object):
     engine = None
     session = None
     database_engine = 'sqlite'
-    database_path = '/data.sqlite'
+    module_root_dir = os.path.dirname(os.path.abspath(__file__))
+    database_file = 'data.sqlite'
 
     def __init__(self, declarative_base):
         self._base = declarative_base()
@@ -137,7 +155,8 @@ class EntityManager(object):
             self._create_connection()
 
     def _create_connection(self):
-        engine_path = self.database_engine + '://' + self.database_path
+        engine_path = self.database_engine + ':///' + os.path.join(self.module_root_dir, self.database_file)
+        print engine_path
         self.engine = create_engine(engine_path, echo=True)
         Session.configure(bind=self.engine)
 
@@ -180,13 +199,16 @@ class EntityManager(object):
             session.add(episode)
         session.commit()
 
+    def create_console_user(self):
+        session = Session()
+        # create a default user for the console frontend
 
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
-    entity_manager.connect_db()
-    #entity_manager.init_db()
+    #entity_manager.connect_db()
+    entity_manager.init_db()
     session = Session()
-    #entity_manager.update_shows()
+    entity_manager.update_shows()
     query = session.query(Show).all()
     for show in query:
         entity_manager.update_episodes(show)
