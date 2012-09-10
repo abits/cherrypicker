@@ -1,4 +1,4 @@
-from backend.entity import Show, Episode, Subscription, EntityManager, Base, Session
+from backend.entity import Show, User, Subscription, EntityManager, Base, Session
 import ConfigParser
 from datetime import datetime, tzinfo
 
@@ -30,10 +30,22 @@ class SubscriptionAdapter(object):
             subscriptions.readfp(open(self.subscription_file))
         except IOError:
             raise IOError
-        for show_name in subscriptions.sections():
-            pass
+        session = Session()
+#        query = session.query(User).filter(User.username == 'console').all()
+#        for user in query:
+#            user.cancel_subscriptions()
+        for show in subscriptions.sections():
+            if subscriptions.get(show, 'subscribed') == 'true':
+                if session.query(Subscription).filter(Subscription.user_id == 1).\
+                    filter(Subscription.show_id == subscriptions.get(show, 'id')):
+                        pass
+                subscription = Subscription()
+                subscription.show_id = subscriptions.get(show, 'id')
 
-
+                subscription.user_id = 1
+                subscription.active = True
+                session.add(subscription)
+        session.commit()
 
 class SubscriptionManager(object):
     pass
@@ -42,7 +54,9 @@ class SubscriptionManager(object):
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
     entity_manager.connect_db()
+    #user = entity_manager.create_console_user()
+
     sca = SubscriptionAdapter(entity_manager)
-    #sca.generate_subscription_file_template()
+   # sca.generate_subscription_file_template()
     sca.load_subscriptions_from_file()
 

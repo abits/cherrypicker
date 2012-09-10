@@ -6,6 +6,7 @@ from sqlalchemy import *
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+
 Base = declarative_base()
 Session = sessionmaker()
 
@@ -13,6 +14,11 @@ class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, index=True)
+
+    def cancel_subscriptions(self):
+        session = Session()
+        query = session.query(Subscription, User).filter(
+            User.id == Subscription.user_id).delete()
 
 class Show(Base):
     __tablename__ = 'shows'
@@ -34,7 +40,8 @@ class Show(Base):
     updated_at = Column(DateTime, default=func.now())
 
     def __repr__(self):
-        return "<Show('%s (%s), %s %s')>" % (self.name, self.tvr_id, self.air_day, self.airtime)
+        return "<Show('%s (%s), %s %s')>" % (
+            self.name, self.tvr_id, self.air_day, self.airtime)
 
     def __init__(self, name, connector):
         self.name = name
@@ -43,7 +50,8 @@ class Show(Base):
     def get_last_episode(self):
         last_episode = None
         session = Session()
-        all_episodes = session.query(Episode).filter(Episode.show_id == self.id).all()
+        all_episodes = session.query(Episode).filter(
+            Episode.show_id == self.id).all()
         current_time = datetime.now()
         for episode in all_episodes:
             if episode.air_date and episode.air_date < current_time:
@@ -61,7 +69,7 @@ class Show(Base):
         self.origin_country = show_data['origin_country']
         self.started = show_data['started']
         self.ended = show_data['ended']
-        self.status =show_data['status']
+        self.status = show_data['status']
         self.runtime = show_data['runtime']
         self.total_seasons = show_data['total_seasons']
         self.airtime = show_data['air_hours']
@@ -73,6 +81,7 @@ class Show(Base):
         session = Session()
         session.add(self)
         session.commit()
+
 
 class Episode(Base):
     __tablename__ = 'episodes'
@@ -87,7 +96,8 @@ class Episode(Base):
     show_id = Column(Integer, ForeignKey('shows.id'), nullable=False)
 
     def __repr__(self):
-        return "<Episode('%s, %02dx%02d')>" % (self.show_id, int(self.season_num), int(self.ep_num))
+        return "<Episode('%s, %02dx%02d')>" % (
+            self.show_id, int(self.season_num), int(self.ep_num))
 
     def __init__(self, show_id, episode_data):
         self.show_id = show_id
@@ -107,12 +117,16 @@ class Episode(Base):
         session.add(self)
         session.commit()
 
+
 class Subscription(Base):
     __tablename__ = 'subscriptions'
     id = Column(Integer, primary_key=True)
-    show_id = Column(Integer, ForeignKey('shows.id'), nullable=True)
-    last_downloaded_episode_id = Column(Integer, ForeignKey('episodes.id'), nullable=True)
+    show_id = Column(Integer, ForeignKey('shows.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    last_downloaded_episode_id = Column(Integer, ForeignKey('episodes.id'),
+                                        nullable=True)
     active = Column(Boolean, nullable=False, default=True)
+
 
 class Schedule(object):
     current_shows = []
@@ -126,6 +140,7 @@ class Schedule(object):
 
     def get_schedule_for_day(self, date):
         pass
+
 
 class EntityManager(object):
     """ Represents database interactions, is a singleton. """
@@ -155,7 +170,8 @@ class EntityManager(object):
             self._create_connection()
 
     def _create_connection(self):
-        engine_path = self.database_engine + ':///' + os.path.join(self.module_root_dir, self.database_file)
+        engine_path = self.database_engine + ':///' + os.path.join(
+            self.module_root_dir, self.database_file)
         print engine_path
         self.engine = create_engine(engine_path, echo=True)
         Session.configure(bind=self.engine)
@@ -188,7 +204,8 @@ class EntityManager(object):
         episodes = episode_connector.update_episodes(show)
         for ep in episodes:
             # see if we already got the episode in database
-            query = session.query(Episode).join(Show).filter(Show.id == show.id).filter(Episode.num == ep['num']).all()
+            query = session.query(Episode).join(Show).filter(
+                Show.id == show.id).filter(Episode.num == ep['num']).all()
             if not query:
                 episode = Episode(show.id, ep)
             else:
@@ -200,8 +217,16 @@ class EntityManager(object):
         session.commit()
 
     def create_console_user(self):
+        return_value = None
         session = Session()
-        # create a default user for the console frontend
+        if not session.query(User).filter(User.username == 'console'):
+            console_user = User()
+            console_user.username = 'console'
+            session.add(console_user)
+            session.commit()
+            return_value = console_user
+        return return_value
+
 
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
