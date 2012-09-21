@@ -17,8 +17,11 @@ class User(Base):
 
     def cancel_subscriptions(self):
         session = Session()
-        query = session.query(Subscription, User).filter(
-            User.id == Subscription.user_id).delete()
+        session.query(Subscription).filter(Subscription.user_id == self.id).delete()
+        session.commit()
+
+    def __repr__(self):
+        return '<User %s, %s>' % (self.id, self.username)
 
 class Show(Base):
     __tablename__ = 'shows'
@@ -219,12 +222,12 @@ class EntityManager(object):
     def create_console_user(self):
         return_value = None
         session = Session()
-        if not session.query(User).filter(User.username == 'console'):
+        if not session.query(User).filter(User.username == 'console').count():
             console_user = User()
             console_user.username = 'console'
             session.add(console_user)
-            session.commit()
             return_value = console_user
+        session.commit()
         return return_value
 
 

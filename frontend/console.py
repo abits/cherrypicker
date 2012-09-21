@@ -2,6 +2,21 @@ from backend.entity import Show, User, Subscription, EntityManager, Base, Sessio
 import ConfigParser
 from datetime import datetime, tzinfo
 
+class FileError(Exception):
+    pass
+
+class SubscriptionFileError(FileError):
+    """Exception raised for errors in the subscription file.
+
+    Attributes:
+        expr -- input expression in which the error occurred
+        msg  -- explanation of the error
+    """
+
+    def __init__(self, expr, msg):
+        self.expr = expr
+        self.msg = msg
+
 class SubscriptionAdapter(object):
     subscription_file = 'subscriptions.cfg'
 
@@ -28,24 +43,24 @@ class SubscriptionAdapter(object):
         subscriptions = ConfigParser.RawConfigParser()
         try:
             subscriptions.readfp(open(self.subscription_file))
-        except IOError:
+        except IOError as e:
+            print e
             raise IOError
         session = Session()
-#        query = session.query(User).filter(User.username == 'console').all()
-#        for user in query:
-#            user.cancel_subscriptions()
+        for user in session.query(User).filter(User.username == 'console').all():
+            user.cancel_subscriptions()
         for show in subscriptions.sections():
-            if subscriptions.get(show, 'subscribed') == 'true':
-                if session.query(Subscription).filter(Subscription.user_id == 1).\
-                    filter(Subscription.show_id == subscriptions.get(show, 'id')):
-                        pass
-                subscription = Subscription()
-                subscription.show_id = subscriptions.get(show, 'id')
-
-                subscription.user_id = 1
-                subscription.active = True
-                session.add(subscription)
+            self.update_from_file(session, subscriptions, show)
         session.commit()
+
+    def update_from_file(self, session, config_file, item):
+        if config_file.get(item, 'subscribed') == 'true':
+            subscription = Subscription()
+            subscription.active = True
+            subscription.user_id = 1
+            subscription.show_id = config_file.get(item, 'id')
+            session.add(subscription)
+
 
 class SubscriptionManager(object):
     pass
@@ -54,9 +69,8 @@ class SubscriptionManager(object):
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
     entity_manager.connect_db()
-    #user = entity_manager.create_console_user()
-
+    user = entity_manager.create_console_user()
     sca = SubscriptionAdapter(entity_manager)
-   # sca.generate_subscription_file_template()
+    #sca.generate_subscription_file_template()
     sca.load_subscriptions_from_file()
 
