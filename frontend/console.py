@@ -1,5 +1,6 @@
-from backend.entity import Show, User, Subscription, EntityManager, Base, Session
-import ConfigParser
+from backend.entity import Show, User, Subscription, EntityManager, Base, Session, Episode
+from lib.connector import FilesTubeConnector
+import ConfigParser, sys
 from datetime import datetime, tzinfo
 
 class FileError(Exception):
@@ -63,14 +64,48 @@ class SubscriptionAdapter(object):
 
 
 class SubscriptionManager(object):
-    pass
+    def check_for_updates(self, username):
+        session = Session()
+        users = session.query(User).filter(User.username == username).all()
+        user = users[0] # username is unique
+        subscriptions = session.query(Subscription).filter(Subscription.user_id == user.id)
+        download_queue = []
+        for subscription in subscriptions:
+            shows = session.query(Show).filter(Show.id == subscription.show_id)
+            query = session.query(Episode).filter(Episode.id == subscription.last_downloaded_episode_id).all()
+            if query:
+                last_downloaded_episode = query[0]
+                current = last_downloaded_episode.get_next()
+                while current is not None and current is not shows[0].get_last_episode().get_next():
+                    download_queue.append(current)
+                    current = current.get_next()
+            else:
+                current = shows[0].get_last_episode()
+                download_queue.append(current)
+        return download_queue
 
+    def get_download_links(self, download_queue):
+        client = FilesTubeConnector()
+        download_links = []
+        for episode in download_queue:
+            session = Session()
+            shows = session.query(Show).filter(Show.id == episode.show_id).all()
+            search_string = '%s %sx%02s' % (shows[0].name, episode.season_num, episode.ep_num)
+            client.update(search_string, host='rapidgator')
+            for res in client.getResults():
+                download_links.append(res['downloadUrl'])
+                break
+        return download_links
 
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
     entity_manager.connect_db()
-    user = entity_manager.create_console_user()
+
+#    user = entity_manager.create_console_user()
     sca = SubscriptionAdapter(entity_manager)
-    #sca.generate_subscription_file_template()
+#    #sca.generate_subscription_file_template()
     sca.load_subscriptions_from_file()
 
+    scm = SubscriptionManager()
+    print scm.get_download_links(scm.check_for_updates('console'))
+    sys.exit(0)

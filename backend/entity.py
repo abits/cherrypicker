@@ -120,6 +120,19 @@ class Episode(Base):
         session.add(self)
         session.commit()
 
+    def get_next(self):
+        session = Session()
+        next_episode_number = self.num + 1
+        query = session.query(Episode).\
+            filter(Episode.show_id == self.show_id).\
+            filter(Episode.num == next_episode_number).all()
+        if query:
+            next_episode = query[0]
+        else:
+            next_episode = None
+
+        return next_episode
+
 
 class Subscription(Base):
     __tablename__ = 'subscriptions'

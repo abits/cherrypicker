@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 import string
+import sys
 from pytz import timezone
 import pytz
 import re
@@ -7,6 +8,9 @@ import urllib
 import urllib2
 from BeautifulSoup import BeautifulSoup
 import xml.etree.ElementTree as et
+import threading
+import Queue
+import logging
 
 
 class ConnectorCache(object):
@@ -89,6 +93,12 @@ class CatalogueConnector(Connector):
         """ Retrieve data for shows which are currently airing."""
         raise NotImplementedError
 
+
+class SearchConnector(Connector):
+    """ Retrieve file download links.
+        Abstract class which defines the connector
+        api for search requests.
+    """
 
 class EztvCatalogueConnector(CatalogueConnector):
     """ Retrieves show data from eztv.it. """
@@ -320,3 +330,83 @@ class TvrageShowConnector(ShowConnector):
 
         return show_id
 
+class FilesTubeConnector(SearchConnector):
+    _service_api_key = '7c15619be31a126ceeaf7fcc070588f7'
+    _service_base_urls = 'http://api.filestube.com/?'
+    _host_codes = {'uploaded': '24',
+                  'wupload': '49',
+                  'mediafire': '15',
+                  'rapidshare': '1',
+                  'depositfiles': '12',
+                  'hotfile': '27',
+                  'letitbit': '25',
+                  'oron': '43',
+                  'netload': '22',
+                  'rapidgator': '64'}
+
+    def __init__(self):
+        super(FilesTubeConnector, self).__init__()
+        self._resultsQueue = Queue.Queue()
+        self._threads = []
+
+    def update(self, phrase, extension='avi', sort='dd', host='uploaded'):
+        parameters = {'key': self._service_api_key,
+                      'phrase': phrase,
+                      'extension': extension,
+                      'sort': sort,
+                      'hosting': self._host_codes[host]}
+        requestUrl = self._service_base_urls + urllib.urlencode(parameters)
+        self._parse(urllib2.urlopen(requestUrl))
+        return requestUrl
+
+    def getResults(self):
+        results = []
+        while 1:
+            try:
+                results.append(self._resultsQueue.get(block=False))
+            except:
+                return results
+
+    def getOneUrl(self):
+        results = self.getResults()
+        returnValue = ''
+        if len(results) > 0:
+            returnValue = results[0]['downloadUrl']
+        return returnValue
+
+    def _parse(self, fileHandle):
+        tree = et.parse(fileHandle)
+        root = tree.getroot()
+        hits = root.getiterator('hits')
+        for hit in hits:
+            t = threading.Thread(target=self._retrieveResults, args=(hit,))
+            t.start()
+            self._threads.append(t)
+        for thread in self._threads:
+            thread.join()
+
+    def _retrieveResults(self, hit):
+        details = { 'detailsUrl': hit.findtext('details'),
+                    'downloadUrl': self._scrape(hit.findtext('details')),
+                    'addedDate': hit.findtext('added'),
+                    'size': hit.findtext('size'),
+                    'name': hit.findtext('name'),
+                    'extension': hit.findtext('extension') }
+        self._resultsQueue.put(details, timeout=3000)
+
+    def _scrape(self, url):
+        link = ''
+        try:
+            html = urllib2.urlopen(url)
+            soup = BeautifulSoup(html)
+            link = soup.find(id='copy_paste_links').string
+        except:
+            logging.error("LinkFetcher: Network connection error.")
+        return link.rstrip()
+
+if __name__ == '__main__':
+    client = FilesTubeConnector()
+    res = client.update('The Office 9x01', host='rapidgator')
+    print res
+    print client.getResults()
+    sys.exit()
