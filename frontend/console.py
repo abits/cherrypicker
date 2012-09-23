@@ -1,6 +1,6 @@
 from backend.entity import Show, User, Subscription, EntityManager, Base, Session, Episode
 from lib.connector import FilesTubeConnector
-import ConfigParser, sys
+import ConfigParser, sys, logging
 from datetime import datetime, tzinfo
 
 class FileError(Exception):
@@ -72,16 +72,27 @@ class SubscriptionManager(object):
         download_queue = []
         for subscription in subscriptions:
             shows = session.query(Show).filter(Show.id == subscription.show_id)
-            query = session.query(Episode).filter(Episode.id == subscription.last_downloaded_episode_id).all()
-            if query:
-                last_downloaded_episode = query[0]
-                current = last_downloaded_episode.get_next()
-                while current is not None and current is not shows[0].get_last_episode().get_next():
-                    download_queue.append(current)
-                    current = current.get_next()
-            else:
-                current = shows[0].get_last_episode()
+            current = shows[0].get_last_episode()
+            if not isinstance(subscription.last_downloaded_episode_id, (int, long)):
+                # we haven't downloaded any episode yet, so we simply fetch the
+                # current one
                 download_queue.append(current)
+            else:
+                # we already have downloaded episodes for this show, so we have
+                # to check if we are up to date
+                query = session.query(Episode).filter(Episode.id == subscription.last_downloaded_episode_id).all()
+                if not query:
+                    logging.error("console.py: Cannot find episode by id.") # something went wrong
+                    continue
+                else:
+                    last_downloaded_episode = query[0]
+                try:
+                    index = last_downloaded_episode.get_next()
+                    while index.air_date <= current.air_date:
+                        download_queue.append(index)
+                        index = index.get_next()
+                except AttributeError:
+                    logging.error("console.py: Something went wrong.")
         return download_queue
 
     def get_download_links(self, download_queue):
@@ -93,7 +104,7 @@ class SubscriptionManager(object):
             search_string = '%s %sx%02s' % (shows[0].name, episode.season_num, episode.ep_num)
             client.update(search_string, host='rapidgator')
             for res in client.getResults():
-                download_links.append(res['downloadUrl'])
+                download_links.append(res)
                 break
         return download_links
 
