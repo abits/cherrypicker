@@ -303,10 +303,12 @@ class TvrageShowConnector(ShowConnector):
                    'Nov': '11',
                    'Dec': '12' }
         date_phrase = root.findtext(phrase)
-        if date_phrase:
+        try:
             month_word, day, year = date_phrase.split('/')
             month = months[month_word]
             date_string = '%s-%s-%s' % (year, month, day)
+        except:
+            pass
         return date_string
 
     def _get_ended(self, root):
@@ -386,9 +388,9 @@ class FilesTubeConnector(SearchConnector):
             thread.join()
 
     def _retrieveResults(self, hit):
-        details = { 'detailsUrl': hit.findtext('details'),
-                    'downloadUrl': self._scrape(hit.findtext('details')),
-                    'addedDate': hit.findtext('added'),
+        details = { 'details_url': hit.findtext('details'),
+                    'download_url': self._scrape(hit.findtext('details')),
+                    'added_date': hit.findtext('added'),
                     'size': hit.findtext('size'),
                     'name': hit.findtext('name'),
                     'extension': hit.findtext('extension') }

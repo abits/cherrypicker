@@ -1,6 +1,9 @@
 from backend.entity import Show, User, Subscription, EntityManager, Base, Session, Episode
 from lib.connector import FilesTubeConnector
 import ConfigParser, sys, logging
+import pygtk
+pygtk.require('2.0')
+import gtk
 from datetime import datetime, tzinfo
 
 class FileError(Exception):
@@ -29,16 +32,19 @@ class SubscriptionAdapter(object):
         session = Session()
         query = session.query(Show).all()
         for show in query:
-            last_episode = show.get_last_episode()
-            subscriptions.add_section(show.name)
-            subscriptions.set(show.name, 'id', show.id)
-            subscriptions.set(show.name, 'subscribed', 'false')
-            subscriptions.set(show.name, 'season', last_episode.season_num)
-            subscriptions.set(show.name, 'episode', last_episode.ep_num)
-            subscriptions.set(show.name, 'last', last_episode.air_date)
+            try:
+                last_episode = show.get_last_episode()
+                subscriptions.add_section(show.name)
+                subscriptions.set(show.name, 'id', show.id)
+                subscriptions.set(show.name, 'subscribed', 'false')
+                subscriptions.set(show.name, 'season', last_episode.season_num)
+                subscriptions.set(show.name, 'episode', last_episode.ep_num)
+                subscriptions.set(show.name, 'last', last_episode.air_date)
 
-        with open(self.subscription_file, 'wb') as file:
-            subscriptions.write(file)
+                with open(self.subscription_file, 'wb') as file:
+                    subscriptions.write(file)
+            except:
+                pass
 
     def load_subscriptions_from_file(self):
         subscriptions = ConfigParser.RawConfigParser()
@@ -97,16 +103,30 @@ class SubscriptionManager(object):
 
     def get_download_links(self, download_queue):
         client = FilesTubeConnector()
-        download_links = []
+        download_items = {}
         for episode in download_queue:
             session = Session()
             shows = session.query(Show).filter(Show.id == episode.show_id).all()
             search_string = '%s %sx%02s' % (shows[0].name, episode.season_num, episode.ep_num)
             client.update(search_string, host='rapidgator')
+            results = []
             for res in client.getResults():
-                download_links.append(res)
+                results.append(res)
                 break
-        return download_links
+            download_items[shows[0].name] = results
+        return download_items
+
+    def download_latest_episodes_to_clipboard(self, username):
+        download_queue = self.check_for_updates(username)
+        download_items = self.get_download_links(download_queue)
+        items = []
+        for show in download_items.keys():
+            for item in download_items[show]:
+                items.append(item['download_url'])
+        items_string = '\n'.join(items)
+        clipboard = gtk.clipboard_get()
+        clipboard.set_text(items_string)
+        clipboard.store()
 
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
@@ -114,9 +134,9 @@ if __name__ == '__main__':
 
 #    user = entity_manager.create_console_user()
     sca = SubscriptionAdapter(entity_manager)
-#    #sca.generate_subscription_file_template()
+    #sca.generate_subscription_file_template()
     sca.load_subscriptions_from_file()
 
     scm = SubscriptionManager()
-    print scm.get_download_links(scm.check_for_updates('console'))
+    scm.download_latest_episodes_to_clipboard('console')
     sys.exit(0)
