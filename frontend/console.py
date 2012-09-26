@@ -82,7 +82,7 @@ class SubscriptionManager(object):
             if not isinstance(subscription.last_downloaded_episode_id, (int, long)):
                 # we haven't downloaded any episode yet, so we simply fetch the
                 # current one
-                download_queue.append(current)
+                download_queue.append((subscription, current))
             else:
                 # we already have downloaded episodes for this show, so we have
                 # to check if we are up to date
@@ -95,7 +95,7 @@ class SubscriptionManager(object):
                 try:
                     index = last_downloaded_episode.get_next()
                     while index.air_date <= current.air_date:
-                        download_queue.append(index)
+                        download_queue.append((subscription, index))
                         index = index.get_next()
                 except AttributeError:
                     logging.error("console.py: Something went wrong.")
@@ -104,13 +104,15 @@ class SubscriptionManager(object):
     def get_download_links(self, download_queue):
         client = FilesTubeConnector()
         download_items = {}
-        for episode in download_queue:
+        for subscription, episode in download_queue:
             session = Session()
             shows = session.query(Show).filter(Show.id == episode.show_id).all()
-            search_string = '%s %sx%02s' % (shows[0].name, episode.season_num, episode.ep_num)
+            search_string = '%s %sx%02d' % (shows[0].name, episode.season_num, episode.ep_num)
             client.update(search_string, host='rapidgator')
             results = []
             for res in client.getResults():
+                res['episode_id'] = episode.id
+                res['subscription_id'] = subscription.id
                 results.append(res)
                 break
             download_items[shows[0].name] = results
@@ -120,9 +122,14 @@ class SubscriptionManager(object):
         download_queue = self.check_for_updates(username)
         download_items = self.get_download_links(download_queue)
         items = []
+        session = Session()
         for show in download_items.keys():
             for item in download_items[show]:
                 items.append(item['download_url'])
+                subscription = session.query(Subscription).filter(Subscription.id == item['subscription_id']).first()
+                subscription.last_downloaded_episode_id = item['episode_id']
+        session.commit()
+
         items_string = '\n'.join(items)
         clipboard = gtk.clipboard_get()
         clipboard.set_text(items_string)
