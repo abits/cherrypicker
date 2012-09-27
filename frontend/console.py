@@ -1,13 +1,10 @@
-from backend.entity import Show, User, Subscription, EntityManager, \
-    Base, Session, Episode
+from backend.entity import Show, User, Subscription, Session, Episode
 from lib.connector import FilesTubeConnector
 import ConfigParser
-import sys
 import logging
 import pygtk
 pygtk.require('2.0')
 import gtk
-
 
 class FileError(Exception):
     pass
@@ -132,23 +129,35 @@ class SubscriptionManager(object):
             download_items[shows[0].name] = results
         return download_items
 
-    def download_latest_episodes_to_clipboard(self, username):
+    def download_latest_episodes_to_clipboard(self, items):
+        items_string = '\n'.join(items)
+        clipboard = gtk.clipboard_get()
+        clipboard.set_text(items_string)
+        clipboard.store()
+
+    def download_latest_episodes(self, username):
         download_queue = self.check_for_updates(username)
         download_items = self.get_download_links(download_queue)
         items = []
         session = Session()
+        config = ConfigParser.ConfigParser()
+        config.read(SubscriptionAdapter.subscription_file)
         for show in download_items.keys():
             for item in download_items[show]:
                 items.append(item['download_url'])
                 subscription = session.query(Subscription).\
                 filter(Subscription.id == item['subscription_id']).first()
                 subscription.last_downloaded_episode_id = item['episode_id']
+                episode = session.query(Episode).\
+                filter(Episode.id == item['episode_id']).first()
+                logging.info(item['download_url'])
+                config.set(str(show), 'season', episode.season_num)
+                config.set(str(show), 'episode', episode.ep_num)
+                config.set(str(show), 'last', episode.air_date)
+        with open(SubscriptionAdapter.subscription_file, 'wb') as configfile:
+            config.write(configfile)
         session.commit()
-
-        items_string = '\n'.join(items)
-        clipboard = gtk.clipboard_get()
-        clipboard.set_text(items_string)
-        clipboard.store()
+        return items
 
 
 class OptionsAdapter(object):
@@ -158,16 +167,3 @@ class OptionsAdapter(object):
 class OptionsManager(object):
     pass
 
-
-if __name__ == '__main__':
-    entity_manager = EntityManager(Base)
-    entity_manager.connect_db()
-
-#    user = entity_manager.create_console_user()
-    sca = SubscriptionAdapter(entity_manager)
-    #sca.generate_subscription_file_template()
-    sca.load_subscriptions_from_file()
-
-    scm = SubscriptionManager()
-    scm.download_latest_episodes_to_clipboard('console')
-    sys.exit(0)

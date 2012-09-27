@@ -4,6 +4,7 @@ from frontend.console import SubscriptionAdapter, SubscriptionManager
 from backend.entity import EntityManager, Base
 import sys
 import argparse
+import logging
 
 def generate_show_template():
     entity_manager = EntityManager(Base)
@@ -19,10 +20,12 @@ def download_new_episodes(args):
     sca = SubscriptionAdapter(entity_manager)
     sca.load_subscriptions_from_file()
     scm = SubscriptionManager()
+    items = scm.download_latest_episodes('console')
     if args.clipboard:
-        scm.download_latest_episodes_to_clipboard('console')
+        scm.download_latest_episodes_to_clipboard(items)
 
 if __name__ == '__main__':
+    logging.basicConfig(format='%(message)s', level=logging.INFO)
     parser = argparse.ArgumentParser()
     group_verbosity = parser.add_mutually_exclusive_group()
     group_verbosity.add_argument('-v', '--verbose', action='store_true')
