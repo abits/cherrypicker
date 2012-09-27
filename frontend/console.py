@@ -1,13 +1,17 @@
-from backend.entity import Show, User, Subscription, EntityManager, Base, Session, Episode
+from backend.entity import Show, User, Subscription, EntityManager, \
+    Base, Session, Episode
 from lib.connector import FilesTubeConnector
-import ConfigParser, sys, logging
+import ConfigParser
+import sys
+import logging
 import pygtk
 pygtk.require('2.0')
 import gtk
-from datetime import datetime, tzinfo
+
 
 class FileError(Exception):
     pass
+
 
 class SubscriptionFileError(FileError):
     """Exception raised for errors in the subscription file.
@@ -20,6 +24,7 @@ class SubscriptionFileError(FileError):
     def __init__(self, expr, msg):
         self.expr = expr
         self.msg = msg
+
 
 class SubscriptionAdapter(object):
     subscription_file = 'subscriptions.cfg'
@@ -54,7 +59,8 @@ class SubscriptionAdapter(object):
             print e
             raise IOError
         session = Session()
-        for user in session.query(User).filter(User.username == 'console').all():
+        for user in session.query(User).\
+        filter(User.username == 'console').all():
             user.cancel_subscriptions()
         for show in subscriptions.sections():
             self.update_from_file(session, subscriptions, show)
@@ -73,22 +79,28 @@ class SubscriptionManager(object):
     def check_for_updates(self, username):
         session = Session()
         users = session.query(User).filter(User.username == username).all()
-        user = users[0] # username is unique
-        subscriptions = session.query(Subscription).filter(Subscription.user_id == user.id)
+        user = users[0]  # username is unique
+        subscriptions = session.query(Subscription).filter(
+            Subscription.user_id == user.id)
         download_queue = []
         for subscription in subscriptions:
             shows = session.query(Show).filter(Show.id == subscription.show_id)
             current = shows[0].get_last_episode()
-            if not isinstance(subscription.last_downloaded_episode_id, (int, long)):
+            if not isinstance(subscription.last_downloaded_episode_id,
+                (int, long)):
                 # we haven't downloaded any episode yet, so we simply fetch the
                 # current one
                 download_queue.append((subscription, current))
             else:
                 # we already have downloaded episodes for this show, so we have
                 # to check if we are up to date
-                query = session.query(Episode).filter(Episode.id == subscription.last_downloaded_episode_id).all()
+                query = session.\
+                query(Episode).\
+                filter(Episode.id == subscription.last_downloaded_episode_id).\
+                all()
                 if not query:
-                    logging.error("console.py: Cannot find episode by id.") # something went wrong
+                    # something went wrong
+                    logging.error("console.py: Cannot find episode by id.")
                     continue
                 else:
                     last_downloaded_episode = query[0]
@@ -106,8 +118,10 @@ class SubscriptionManager(object):
         download_items = {}
         for subscription, episode in download_queue:
             session = Session()
-            shows = session.query(Show).filter(Show.id == episode.show_id).all()
-            search_string = '%s %sx%02d' % (shows[0].name, episode.season_num, episode.ep_num)
+            shows = session.query(Show).\
+                filter(Show.id == episode.show_id).all()
+            search_string = '%s %sx%02d' % (shows[0].name, episode.season_num,
+                                            episode.ep_num)
             client.update(search_string, host='rapidgator')
             results = []
             for res in client.getResults():
@@ -126,7 +140,8 @@ class SubscriptionManager(object):
         for show in download_items.keys():
             for item in download_items[show]:
                 items.append(item['download_url'])
-                subscription = session.query(Subscription).filter(Subscription.id == item['subscription_id']).first()
+                subscription = session.query(Subscription).\
+                filter(Subscription.id == item['subscription_id']).first()
                 subscription.last_downloaded_episode_id = item['episode_id']
         session.commit()
 
@@ -134,6 +149,15 @@ class SubscriptionManager(object):
         clipboard = gtk.clipboard_get()
         clipboard.set_text(items_string)
         clipboard.store()
+
+
+class OptionsAdapter(object):
+    pass
+
+
+class OptionsManager(object):
+    pass
+
 
 if __name__ == '__main__':
     entity_manager = EntityManager(Base)
