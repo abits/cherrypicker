@@ -188,8 +188,7 @@ class EntityManager(object):
     def _create_connection(self):
         engine_path = self.database_engine + ':///' + os.path.join(
             self.module_root_dir, self.database_file)
-        print engine_path
-        self.engine = create_engine(engine_path, echo=True)
+        self.engine = create_engine(engine_path, echo=False)
         Session.configure(bind=self.engine)
 
     def update_shows(self):

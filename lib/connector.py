@@ -1,9 +1,6 @@
-from datetime import date, datetime, time, timedelta
+from datetime import  datetime, timedelta
 import string
 import sys
-from pytz import timezone
-import pytz
-import re
 import urllib
 import urllib2
 from BeautifulSoup import BeautifulSoup
