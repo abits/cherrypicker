@@ -1,7 +1,7 @@
 #!/bin/env python
 
-from frontend.console import SubscriptionAdapter, SubscriptionManager
-from backend.entity import EntityManager, Base
+from cherrypicker.console import SubscriptionAdapter, SubscriptionManager
+from cherrypicker.entity import EntityManager, Base
 import sys
 import argparse
 import logging

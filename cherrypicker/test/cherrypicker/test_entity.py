@@ -1,4 +1,4 @@
-from backend.entity import EntityManager, Show, Subscription, Episode, Base
+from cherrypicker.entity import EntityManager, Show, Base
 import unittest
 from sqlalchemy import *
 from sqlalchemy.ext.declarative import declarative_base

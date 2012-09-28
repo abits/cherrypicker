@@ -1,11 +1,12 @@
 import os
 from datetime import datetime
-from lib import connector
+from cherrypicker import connector
 from sqlalchemy import Integer, String, Column, DateTime, func
 from sqlalchemy import *
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+import cherrypicker
 
 Base = declarative_base()
 Session = sessionmaker()
@@ -166,6 +167,7 @@ class EntityManager(object):
     session = None
     database_engine = 'sqlite'
     module_root_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = cherrypicker.data_dir
     database_file = 'data.sqlite'
 
     def __init__(self, declarative_base):
@@ -187,7 +189,7 @@ class EntityManager(object):
 
     def _create_connection(self):
         engine_path = self.database_engine + ':///' + os.path.join(
-            self.module_root_dir, self.database_file)
+            self.data_dir, self.database_file)
         self.engine = create_engine(engine_path, echo=False)
         Session.configure(bind=self.engine)
 

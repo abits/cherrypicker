@@ -1,10 +1,12 @@
-from backend.entity import Show, User, Subscription, Session, Episode
-from lib.connector import FilesTubeConnector
+from cherrypicker.entity import Show, User, Subscription, Session, Episode
+from cherrypicker.connector import FilesTubeConnector
+import cherrypicker
 import ConfigParser
 import logging
 import pygtk
 pygtk.require('2.0')
 import gtk
+import os
 
 class FileError(Exception):
     pass
@@ -24,7 +26,7 @@ class SubscriptionFileError(FileError):
 
 
 class SubscriptionAdapter(object):
-    subscription_file = 'subscriptions.cfg'
+    subscription_file = os.path.join(cherrypicker.data_dir, 'subscriptions.cfg')
 
     def __init__(self, entity_manager):
         self.entity_manager = entity_manager

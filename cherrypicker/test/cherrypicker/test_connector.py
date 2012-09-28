@@ -1,5 +1,4 @@
-from lib.connector import TvrageShowConnector
-from backend.entity import Show
+from cherrypicker.connector import TvrageShowConnector
 import unittest
 
 
