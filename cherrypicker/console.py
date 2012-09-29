@@ -121,7 +121,7 @@ class SubscriptionManager(object):
                 filter(Show.id == episode.show_id).all()
             search_string = '%s %sx%02d' % (shows[0].name, episode.season_num,
                                             episode.ep_num)
-            client.update(search_string, host='rapidgator')
+            client.update(search_string, host='RapidGator')
             results = []
             for res in client.getResults():
                 res['episode_id'] = episode.id

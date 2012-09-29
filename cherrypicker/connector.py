@@ -7,6 +7,7 @@ from BeautifulSoup import BeautifulSoup
 import xml.etree.ElementTree as et
 import threading
 import Queue
+import urlparse
 import logging
 
 
@@ -332,21 +333,24 @@ class TvrageShowConnector(ShowConnector):
 class FilesTubeConnector(SearchConnector):
     _service_api_key = '7c15619be31a126ceeaf7fcc070588f7'
     _service_base_urls = 'http://api.filestube.com/?'
-    _host_codes = {'uploaded': '24',
-                  'wupload': '49',
-                  'mediafire': '15',
-                  'rapidshare': '1',
-                  'depositfiles': '12',
-                  'hotfile': '27',
-                  'letitbit': '25',
-                  'oron': '43',
-                  'netload': '22',
-                  'rapidgator': '64'}
+    _host_codes = {}
 
     def __init__(self):
         super(FilesTubeConnector, self).__init__()
         self._resultsQueue = Queue.Queue()
         self._threads = []
+        self._host_codes = self.update_host_codes()
+
+    def update_host_codes(self):
+        request_url = 'http://www.filestube.com/search.html?q=test&select=All&sah=1'
+        html = urllib2.urlopen(request_url)
+        soup = BeautifulSoup(html)
+        links = soup.find(id='results_left').findAll('a', 'hosting_all')
+        result = {}
+        for link in links:
+            query =  urlparse.parse_qs(link['href'])
+            result[link.contents[0]] = query['hosting'][0]
+        return result
 
     def update(self, phrase, extension='avi', sort='dd', host='uploaded'):
         parameters = {'key': self._service_api_key,
@@ -405,7 +409,9 @@ class FilesTubeConnector(SearchConnector):
 
 if __name__ == '__main__':
     client = FilesTubeConnector()
-    res = client.update('The Office 9x01', host='rapidgator')
-    print res
-    print client.getResults()
+    print client.update_host_codes()
+
+#    res = client.update('The Office 9x01', host='rapidgator')
+#    print res
+#    print client.getResults()
     sys.exit()
