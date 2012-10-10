@@ -349,10 +349,10 @@ class FilesTubeConnector(SearchConnector):
         result = {}
         for link in links:
             query =  urlparse.parse_qs(link['href'])
-            result[link.contents[0]] = query['hosting'][0]
+            result[link.contents[0].lower()] = query['hosting'][0]
         return result
 
-    def update(self, phrase, extension='avi', sort='dd', host='uploaded'):
+    def update(self, phrase, extension='avi', sort='dd', host='rapidshare'):
         parameters = {'key': self._service_api_key,
                       'phrase': phrase,
                       'extension': extension,

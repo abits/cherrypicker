@@ -24,6 +24,17 @@ class SubscriptionFileError(FileError):
         self.expr = expr
         self.msg = msg
 
+class OptionFileError(FileError):
+    """Exception raised for errors in the options file.
+
+    Attributes:
+        expr -- input expression in which the error occurred
+        msg  -- explanation of the error
+    """
+
+    def __init__(self, expr, msg):
+        self.expr = expr
+        self.msg = msg
 
 class SubscriptionAdapter(object):
     subscription_file = os.path.join(cherrypicker.data_dir, 'subscriptions.cfg')
@@ -73,8 +84,37 @@ class SubscriptionAdapter(object):
             subscription.show_id = config_file.get(item, 'id')
             session.add(subscription)
 
+    def update_subscription_file(self,):
+        subscriptions = ConfigParser.RawConfigParser()
+        session = Session()
+        query = session.query(Show).all()
+        for show in query:
+            subscribed = 'false'
+            subscription_results = session.query(Subscription).\
+                filter(Subscription.user_id == 1).\
+                filter(Subscription.show_id == show.id).all()
+            if subscription_results:
+                subscribed = 'true'
+            try:
+                last_episode = show.get_last_episode()
+                subscriptions.add_section(show.name)
+                subscriptions.set(show.name, 'id', show.id)
+                subscriptions.set(show.name, 'subscribed', subscribed)
+                subscriptions.set(show.name, 'season', last_episode.season_num)
+                subscriptions.set(show.name, 'episode', last_episode.ep_num)
+                subscriptions.set(show.name, 'last', last_episode.air_date)
+
+                with open(self.subscription_file, 'wb') as file:
+                    subscriptions.write(file)
+            except:
+                pass
+
+
 
 class SubscriptionManager(object):
+    def __init__(self):
+        self._option_manager = OptionsManager()
+
     def check_for_updates(self, username):
         session = Session()
         users = session.query(User).filter(User.username == username).all()
@@ -113,21 +153,26 @@ class SubscriptionManager(object):
         return download_queue
 
     def get_download_links(self, download_queue):
-        client = FilesTubeConnector()
         download_items = {}
         for subscription, episode in download_queue:
             session = Session()
             shows = session.query(Show).\
                 filter(Show.id == episode.show_id).all()
-            search_string = '%s %sx%02d' % (shows[0].name, episode.season_num,
-                                            episode.ep_num)
-            client.update(search_string, host='RapidGator')
+            search_string = '%s %sx%02d %s %s' % (
+                                shows[0].name,
+                                episode.season_num,
+                                episode.ep_num,
+                                ' '.join(self._option_manager.release_groups),
+                                ' '.join(self._option_manager.quality))
             results = []
-            for res in client.getResults():
-                res['episode_id'] = episode.id
-                res['subscription_id'] = subscription.id
-                results.append(res)
-                break
+            for hoster in self._option_manager.hoster:
+                client = FilesTubeConnector()
+                client.update(search_string, host=hoster)
+                for res in client.getResults():
+                    res['episode_id'] = episode.id
+                    res['subscription_id'] = subscription.id
+                    results.append(res)
+                    break
             download_items[shows[0].name] = results
         return download_items
 
@@ -163,9 +208,57 @@ class SubscriptionManager(object):
 
 
 class OptionsAdapter(object):
-    pass
+    _subscription_file = os.path.join(cherrypicker.data_dir, 'options.cfg')
+    _options_manager = None
+
+    def __init__(self):
+        self._options_manager = OptionsManager()
+
+    def generate_default_option_file(self):
+        options = ConfigParser.RawConfigParser()
+        options.add_section('hoster')
+        options.set('hoster', 'rapidshare', 'true')
+        options.add_section('release_groups')
+        options.set('release_groups', 'afg', 'true')
+        options.add_section('quality')
+        options.set('quality', 'hdtv', 'true')
+        try:
+            with open(self._subscription_file, 'wb') as configfile:
+                options.write(configfile)
+        except IOError:
+            raise OptionFileError(self, 'Cannot write to file options.cfg.')
+
+    def load_options_from_file(self):
+        options = ConfigParser.RawConfigParser()
+        try:
+            options.readfp(open(self._subscription_file))
+        except IOError as e:
+            raise OptionFileError(self, 'Cannot read from options.cfg.')
+        list_sections = ['hoster', 'release_groups', 'quality']
+        for section in list_sections:
+            items = []
+            for item, value in options.items(section):
+                if value == 'true':
+                    items.append(item)
+            self._options_manager.__dict__[section] = items
+
+
+    def save_options_to_file(self):
+        raise NotImplementedError
 
 
 class OptionsManager(object):
-    pass
+    """ Represents user options, is a singleton. """
+    __single = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls != type(cls.__single):
+            cls.__single = object.__new__(cls, *args, **kwargs)
+        return cls.__single
+
+if __name__ == '__main__':
+    oa = OptionsAdapter()
+    #oa.generate_default_option_file()
+    oa.load_options_from_file()
+    om = OptionsManager()
 
