@@ -1,4 +1,5 @@
 from cherrypicker.entity import Show, User, Subscription, Session, Episode
+from cherrypicker.entity import EntityManager, Base
 from cherrypicker.connector import FilesTubeConnector
 import cherrypicker
 import ConfigParser
@@ -7,6 +8,8 @@ import pygtk
 pygtk.require('2.0')
 import gtk
 import os
+import sys
+import argparse
 
 class FileError(Exception):
     pass
@@ -256,9 +259,67 @@ class OptionsManager(object):
             cls.__single = object.__new__(cls, *args, **kwargs)
         return cls.__single
 
+#########
+# main user interface
+
+def generate_show_template(args):
+    entity_manager = EntityManager(Base)
+    entity_manager.connect_db()
+    __ = entity_manager.create_console_user()
+    sca = SubscriptionAdapter(entity_manager)
+    sca.generate_subscription_file_template()
+
+def download_new_episodes(args):
+    entity_manager = EntityManager(Base)
+    entity_manager.connect_db()
+    __ = entity_manager.create_console_user()
+    sca = SubscriptionAdapter(entity_manager)
+    sca.load_subscriptions_from_file()
+    scm = SubscriptionManager()
+    items = scm.download_latest_episodes('console')
+    if args.clipboard:
+        scm.download_latest_episodes_to_clipboard(items)
+
+def update_shows(args):
+    entity_manager = EntityManager(Base)
+    entity_manager.connect_db()
+    __ = entity_manager.create_console_user()
+    sca = SubscriptionAdapter(entity_manager)
+    sca.load_subscriptions_from_file()
+    sca.update_subscription_file()
+
 if __name__ == '__main__':
     oa = OptionsAdapter()
     #oa.generate_default_option_file()
     oa.load_options_from_file()
-    om = OptionsManager()
+    logging.basicConfig(format='%(message)s', level=logging.INFO)
+    parser = argparse.ArgumentParser()
+    group_verbosity = parser.add_mutually_exclusive_group()
+    group_verbosity.add_argument('-v', '--verbose', action='store_true')
+    group_verbosity.add_argument('-q', '--quiet', action='store_true')
+    parser.add_argument('-f', '--force', action='store_true')
+    parser.add_argument('-c', '--clipboard',
+        help='copy download links to system clipboard',
+        action='store_true')
+    group_actions = parser.add_mutually_exclusive_group()
+    group_actions.add_argument('-t', '--generate-show-template',
+        help='generate template file',
+        action='store_true')
+    group_actions.add_argument('-u', '--update-shows',
+        help='add running shows to subscription file',
+        action='store_true')
+    group_actions.add_argument('-d', '--download',
+        help='get new download links of subscribed shows',
+        action='store_true')
+    args = parser.parse_args()
 
+    # check for action parameters and act accordingly
+    if args.generate_show_template:
+        generate_show_template(args)
+        sys.exit(0)
+    if args.update_shows:
+        update_shows(args)
+        sys.exit(0)
+    if args.download:
+        download_new_episodes(args)
+        sys.exit(0)
